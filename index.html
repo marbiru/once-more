@@ -5,9 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-title" content="Tasks" />
+<meta name="apple-mobile-web-app-title" content="Once More" />
 <meta name="theme-color" content="#f6f6f4" />
-<title>Recurring Tasks</title>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<link rel="manifest" href="manifest.webmanifest" />
+<title>Once More</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
@@ -20,8 +23,8 @@
   #warn { font-size: 12px; color: #c25c00; margin: -6px 0 12px; line-height: 1.5; }
   .task {
     display: grid; grid-template-columns: 1fr auto;
-    grid-template-areas: "main btn" "chart chart";
-    gap: 8px 12px; align-items: start; padding: 12px 14px;
+    grid-template-areas: "main btn" "chart chart" "edit edit";
+    gap: 6px 12px; align-items: start; padding: 12px 14px;
     border-radius: 12px; background: #f6f6f4; margin-bottom: 8px;
     border-left: 4px solid #cfcfc9;
   }
@@ -30,8 +33,9 @@
   .task-main { grid-area: main; min-width: 0; }
   .task-name { font-weight: 600; font-size: 15px; }
   .task-sub { font-size: 12.5px; color: #6b6b66; margin-top: 3px; }
+  .recur { font-size: 12.5px; color: #6b6b66; }
   .recur-input {
-    width: 40px; font-size: 12.5px; font-family: inherit; text-align: center;
+    width: 52px; font-size: 12.5px; font-family: inherit; text-align: center;
     border: 1px solid #d3d3cd; border-radius: 6px; padding: 1px 3px; background: #fff;
   }
   .btns { grid-area: btn; display: flex; align-items: center; gap: 6px; }
@@ -42,32 +46,41 @@
   .done-btn:active { transform: scale(0.97); }
   .del-btn { border: none; background: transparent; color: #b0b0aa; font-size: 18px; cursor: pointer; line-height: 1; padding: 4px; }
   .chart-cell { grid-area: chart; }
-  .spark { position: relative; height: 42px; margin-top: 2px; }
+  .spark { position: relative; height: 36px; margin-top: 2px; }
   .spark .axis { position: absolute; left: 3%; right: 3%; top: 13px; height: 1px; background: #d5d5cf; }
   .spark .today { position: absolute; right: 3%; top: 6px; height: 16px; border-left: 1px dashed #b0b0aa; }
   .spark .dot { position: absolute; top: 13px; width: 7px; height: 7px; border-radius: 50%; transform: translate(-50%, -50%); }
   .spark .dot.ontime { background: #2f6f4f; }
   .spark .dot.late { background: #d64545; }
-  .spark .dlabel { position: absolute; top: 24px; font-size: 9px; color: #8a8a84; transform: translateX(-50%); white-space: nowrap; }
-  .spark .more { position: absolute; left: 0; top: 24px; font-size: 9px; color: #b7b7b1; }
+  .spark .dlabel { position: absolute; top: 23px; font-size: 9px; color: #8a8a84; transform: translateX(-50%); white-space: nowrap; }
+  .spark .more { position: absolute; left: 0; top: 23px; font-size: 9px; color: #b7b7b1; }
   .nochart { font-size: 11.5px; color: #a5a59f; padding: 3px 0; }
-  .add-row { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  /* --- controls + date editor --- */
+  .edit-cell { grid-area: edit; margin-top: -2px; }
+  .ctrl-line { display: flex; align-items: center; justify-content: flex-start; gap: 6px; }
+  .link { background: none; border: none; color: #2f6f4f; font-size: 12px; font-weight: 600; padding: 2px 0; cursor: pointer; white-space: nowrap; }
+  .editor { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #e0e0da; }
+  .editor-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .editor input[type=date] { font-size: 13px; padding: 6px 8px; border: 1px solid #d8d8d2; border-radius: 8px; font-family: inherit; background: #fff; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+  .chip { font-size: 11px; background: #ececE8; border-radius: 20px; padding: 3px 6px 3px 10px; color: #555; display: flex; align-items: center; gap: 4px; }
+  .chip button { border: none; background: none; color: #9a9a94; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
+  .add-row { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; align-items: center; }
   .add-row input { font-size: 15px; padding: 10px 12px; border: 1px solid #d8d8d2; border-radius: 10px; font-family: inherit; }
   .add-row input[type=text] { flex: 1; min-width: 140px; }
-  .add-row input[type=number] { width: 88px; }
+  .add-row input[type=number] { width: 72px; }
+  .days-lbl { font-size: 14px; color: #6b6b66; }
   .add-btn { border: none; background: #2f6f4f; color: #fff; font-weight: 600; font-size: 15px; padding: 10px 16px; border-radius: 10px; cursor: pointer; }
   .empty { color: #8a8a84; font-size: 14px; padding: 20px 4px; }
   .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 28px; padding-top: 16px; border-top: 1px solid #eee; }
-  .tool {
-    border: 1px solid #d8d8d2; background: #fff; color: #333;
-    font-size: 13px; font-weight: 600; padding: 7px 12px; border-radius: 9px; cursor: pointer;
-  }
+  .tool { border: 1px solid #d8d8d2; background: #fff; color: #333; font-size: 13px; font-weight: 600; padding: 7px 12px; border-radius: 9px; cursor: pointer; }
   .tool:active { background: #f0f0ec; }
+  .tool.small { padding: 6px 12px; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Recurring tasks</h1>
+  <h1>Once More</h1>
   <div id="warn"></div>
 
   <div id="list"></div>
@@ -75,6 +88,7 @@
   <div class="add-row">
     <input id="new-name" type="text" placeholder="Task name" />
     <input id="new-interval" type="number" min="1" placeholder="days" value="30" />
+    <span class="days-lbl">days</span>
     <button class="add-btn" id="add">Add</button>
   </div>
 
@@ -88,9 +102,10 @@
 <script>
 const KEY = 'recurringTasks';
 const DAY = 86400000;
-const CAP = 8;                 // rolling window: dots shown per chart
+const CAP = 8;
 let tasks = [];
 let storageOK = true;
+const expanded = new Set();
 
 function load() {
   try { const raw = localStorage.getItem(KEY); tasks = raw ? JSON.parse(raw) : []; }
@@ -103,6 +118,10 @@ function save() {
   render();
 }
 
+function dayKey(x){
+  const d = new Date(x);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
 function lastDone(t){ const h=t.history||[]; return h.length?h[h.length-1]:null; }
 function daysSince(iso){ return iso===null?null:Math.floor((Date.now()-new Date(iso).getTime())/DAY); }
 
@@ -126,7 +145,7 @@ function buildChart(t) {
   const cell = document.createElement('div');
   cell.className = 'chart-cell';
   const h = t.history||[];
-  if (!h.length){ cell.innerHTML = '<div class="nochart">No history yet &mdash; tap &ldquo;Done today&rdquo;.</div>'; return cell; }
+  if (!h.length){ cell.innerHTML = '<div class="nochart">No history yet &mdash; tap &ldquo;Done today&rdquo; or add a past date below.</div>'; return cell; }
 
   const now = Date.now();
   const times = h.map(d=>new Date(d).getTime()).sort((a,b)=>a-b);
@@ -175,6 +194,84 @@ function buildChart(t) {
   return cell;
 }
 
+function buildControls(t) {
+  const cell = document.createElement('div');
+  cell.className = 'edit-cell';
+
+  const line = document.createElement('div');
+  line.className = 'ctrl-line';
+
+  const recur = document.createElement('span');
+  recur.className = 'recur';
+  recur.append('Every ');
+  const ri = document.createElement('input');
+  ri.type='number'; ri.min='1'; ri.value=t.interval; ri.className='recur-input';
+  ri.onchange = () => { const v=parseInt(ri.value,10); if(v>=1){ t.interval=v; save(); } else { ri.value=t.interval; } };
+  recur.appendChild(ri); recur.append(' days');
+
+  const open = expanded.has(t.id);
+  const toggle = document.createElement('button');
+  toggle.className = 'link';
+  toggle.textContent = open ? 'Hide dates' : 'Edit dates';
+  toggle.onclick = () => { open ? expanded.delete(t.id) : expanded.add(t.id); render(); };
+
+  line.append(toggle);
+  const sep = document.createElement('span');
+  sep.className = 'recur';
+  sep.textContent = '\u00b7';
+  line.append(sep, recur);
+  cell.appendChild(line);
+
+  if (!open) return cell;
+
+  const ed = document.createElement('div');
+  ed.className = 'editor';
+
+  const row = document.createElement('div');
+  row.className = 'editor-row';
+  const dp = document.createElement('input');
+  dp.type = 'date';
+  dp.max = dayKey(Date.now());
+  const addBtn = document.createElement('button');
+  addBtn.className = 'tool small';
+  addBtn.textContent = 'Add date';
+  addBtn.onclick = () => {
+    const v = dp.value; if (!v) return;
+    const parts = v.split('-').map(Number);
+    const iso = new Date(parts[0], parts[1]-1, parts[2], 12, 0, 0).toISOString();
+    t.history = t.history || [];
+    if (!t.history.some(d => dayKey(d) === v)) { t.history.push(iso); }
+    save();
+  };
+  row.append(dp, addBtn);
+  ed.appendChild(row);
+
+  const chips = document.createElement('div');
+  chips.className = 'chips';
+  const sorted = [...(t.history||[])].sort((a,b)=>new Date(b)-new Date(a));
+  if (!sorted.length) {
+    const none = document.createElement('span');
+    none.style.cssText = 'font-size:11px;color:#a5a59f;';
+    none.textContent = 'No dates yet.';
+    chips.appendChild(none);
+  }
+  for (const iso of sorted) {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.append(new Date(iso).toLocaleDateString());
+    const x = document.createElement('button');
+    x.textContent = '\u00d7';
+    x.title = 'Remove';
+    x.onclick = () => { t.history = t.history.filter(d => d !== iso); save(); };
+    chip.appendChild(x);
+    chips.appendChild(chip);
+  }
+  ed.appendChild(chips);
+
+  cell.appendChild(ed);
+  return cell;
+}
+
 function sortKey(t){ const d=daysSince(lastDone(t)); return d===null?Infinity:d-t.interval; }
 
 function render() {
@@ -194,29 +291,22 @@ function render() {
     const main = document.createElement('div');
     main.className = 'task-main';
     const name = document.createElement('div'); name.className='task-name'; name.textContent = t.name;
-
-    const sub = document.createElement('div'); sub.className='task-sub';
-    sub.append(info.text + ' \u00b7 every ');
-    const ri = document.createElement('input');
-    ri.type='number'; ri.min='1'; ri.value=t.interval; ri.className='recur-input';
-    ri.onchange = () => { const v=parseInt(ri.value,10); if(v>=1){ t.interval=v; save(); } else { ri.value=t.interval; } };
-    sub.appendChild(ri); sub.append(' d');
-
+    const sub = document.createElement('div'); sub.className='task-sub'; sub.textContent = info.text;
     main.append(name, sub);
 
     const btns = document.createElement('div'); btns.className='btns';
     const done = document.createElement('button'); done.className='done-btn'; done.textContent='Done today';
     done.onclick = () => {
       t.history = t.history||[];
-      const today = new Date().toISOString().slice(0,10);
-      if (!t.history.some(d=>d.slice(0,10)===today)) t.history.push(new Date().toISOString());
+      const today = dayKey(Date.now());
+      if (!t.history.some(d=>dayKey(d)===today)) t.history.push(new Date().toISOString());
       save();
     };
     const del = document.createElement('button'); del.className='del-btn'; del.title='Delete'; del.textContent='\u00d7';
-    del.onclick = () => { if(confirm('Delete "'+t.name+'"?')){ tasks = tasks.filter(x=>x.id!==t.id); save(); } };
+    del.onclick = () => { if(confirm('Delete "'+t.name+'"?')){ tasks = tasks.filter(x=>x.id!==t.id); expanded.delete(t.id); save(); } };
     btns.append(done, del);
 
-    el.append(main, btns, buildChart(t));
+    el.append(main, btns, buildChart(t), buildControls(t));
     list.appendChild(el);
   }
 }
@@ -240,7 +330,7 @@ document.getElementById('export').onclick = () => {
   const blob = new Blob([toCSV()], {type:'text/csv'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'recurring-tasks.csv';
+  a.href = url; a.download = 'once-more-tasks.csv';
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
 };
