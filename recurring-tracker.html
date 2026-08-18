@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Tasks" />
+<meta name="theme-color" content="#f6f6f4" />
+<title>Recurring Tasks</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0; background: #fff; color: #1a1a1a;
+    padding: env(safe-area-inset-top) 16px calc(env(safe-area-inset-bottom) + 16px);
+  }
+  .wrap { max-width: 560px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 650; margin: 20px 0 14px; }
+  #warn { font-size: 12px; color: #c25c00; margin: -6px 0 12px; line-height: 1.5; }
+  .task {
+    display: grid; grid-template-columns: 1fr auto;
+    grid-template-areas: "main btn" "chart chart";
+    gap: 8px 12px; align-items: start; padding: 12px 14px;
+    border-radius: 12px; background: #f6f6f4; margin-bottom: 8px;
+    border-left: 4px solid #cfcfc9;
+  }
+  .task.due { border-left-color: #e0a900; background: #fbf6e7; }
+  .task.overdue { border-left-color: #d64545; background: #fbe9e9; }
+  .task-main { grid-area: main; min-width: 0; }
+  .task-name { font-weight: 600; font-size: 15px; }
+  .task-sub { font-size: 12.5px; color: #6b6b66; margin-top: 3px; }
+  .recur-input {
+    width: 40px; font-size: 12.5px; font-family: inherit; text-align: center;
+    border: 1px solid #d3d3cd; border-radius: 6px; padding: 1px 3px; background: #fff;
+  }
+  .btns { grid-area: btn; display: flex; align-items: center; gap: 6px; }
+  .done-btn {
+    border: none; background: #1a1a1a; color: #fff; font-size: 13px; font-weight: 600;
+    padding: 8px 12px; border-radius: 9px; cursor: pointer; white-space: nowrap;
+  }
+  .done-btn:active { transform: scale(0.97); }
+  .del-btn { border: none; background: transparent; color: #b0b0aa; font-size: 18px; cursor: pointer; line-height: 1; padding: 4px; }
+  .chart-cell { grid-area: chart; }
+  .spark { position: relative; height: 42px; margin-top: 2px; }
+  .spark .axis { position: absolute; left: 3%; right: 3%; top: 13px; height: 1px; background: #d5d5cf; }
+  .spark .today { position: absolute; right: 3%; top: 6px; height: 16px; border-left: 1px dashed #b0b0aa; }
+  .spark .dot { position: absolute; top: 13px; width: 7px; height: 7px; border-radius: 50%; transform: translate(-50%, -50%); }
+  .spark .dot.ontime { background: #2f6f4f; }
+  .spark .dot.late { background: #d64545; }
+  .spark .dlabel { position: absolute; top: 24px; font-size: 9px; color: #8a8a84; transform: translateX(-50%); white-space: nowrap; }
+  .spark .more { position: absolute; left: 0; top: 24px; font-size: 9px; color: #b7b7b1; }
+  .nochart { font-size: 11.5px; color: #a5a59f; padding: 3px 0; }
+  .add-row { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  .add-row input { font-size: 15px; padding: 10px 12px; border: 1px solid #d8d8d2; border-radius: 10px; font-family: inherit; }
+  .add-row input[type=text] { flex: 1; min-width: 140px; }
+  .add-row input[type=number] { width: 88px; }
+  .add-btn { border: none; background: #2f6f4f; color: #fff; font-weight: 600; font-size: 15px; padding: 10px 16px; border-radius: 10px; cursor: pointer; }
+  .empty { color: #8a8a84; font-size: 14px; padding: 20px 4px; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 28px; padding-top: 16px; border-top: 1px solid #eee; }
+  .tool {
+    border: 1px solid #d8d8d2; background: #fff; color: #333;
+    font-size: 13px; font-weight: 600; padding: 7px 12px; border-radius: 9px; cursor: pointer;
+  }
+  .tool:active { background: #f0f0ec; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Recurring tasks</h1>
+  <div id="warn"></div>
+
+  <div id="list"></div>
+
+  <div class="add-row">
+    <input id="new-name" type="text" placeholder="Task name" />
+    <input id="new-interval" type="number" min="1" placeholder="days" value="30" />
+    <button class="add-btn" id="add">Add</button>
+  </div>
+
+  <div class="toolbar">
+    <button class="tool" id="export">Export CSV</button>
+    <button class="tool" id="import-btn">Import CSV</button>
+    <input id="import-file" type="file" accept=".csv,text/csv" style="display:none" />
+  </div>
+</div>
+
+<script>
+const KEY = 'recurringTasks';
+const DAY = 86400000;
+const CAP = 8;                 // rolling window: dots shown per chart
+let tasks = [];
+let storageOK = true;
+
+function load() {
+  try { const raw = localStorage.getItem(KEY); tasks = raw ? JSON.parse(raw) : []; }
+  catch (e) { storageOK = false; tasks = []; }
+  render();
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(tasks)); }
+  catch (e) { storageOK = false; }
+  render();
+}
+
+function lastDone(t){ const h=t.history||[]; return h.length?h[h.length-1]:null; }
+function daysSince(iso){ return iso===null?null:Math.floor((Date.now()-new Date(iso).getTime())/DAY); }
+
+function dueInfo(t) {
+  const ld = lastDone(t);
+  if (ld === null) return { cls:'overdue', text:'Never done' };
+  const nextDue = new Date(new Date(ld).getTime() + t.interval*DAY);
+  const diff = Math.round((nextDue.getTime() - Date.now())/DAY);
+  const dateStr = nextDue.toLocaleDateString(undefined,{month:'short',day:'numeric'});
+  let cls='', rel;
+  if (diff<0){ cls='overdue'; rel=`overdue by ${-diff}d`; }
+  else if (diff===0){ cls='due'; rel='due today'; }
+  else if (diff<=Math.max(1,t.interval*0.2)){ cls='due'; rel=`due in ${diff}d`; }
+  else rel=`due in ${diff}d`;
+  return { cls, text:`Due ${dateStr} · ${rel}` };
+}
+
+function shortDate(ms){ return new Date(ms).toLocaleDateString(undefined,{month:'numeric',day:'numeric'}); }
+
+function buildChart(t) {
+  const cell = document.createElement('div');
+  cell.className = 'chart-cell';
+  const h = t.history||[];
+  if (!h.length){ cell.innerHTML = '<div class="nochart">No history yet &mdash; tap &ldquo;Done today&rdquo;.</div>'; return cell; }
+
+  const now = Date.now();
+  const times = h.map(d=>new Date(d).getTime()).sort((a,b)=>a-b);
+  const startIdx = Math.max(0, times.length - CAP);
+  const shown = times.slice(startIdx);
+
+  let start = shown[0];
+  const minSpan = t.interval*DAY*2;
+  if (now-start < minSpan) start = now-minSpan;
+  const span = (now-start)||1;
+  const pos = tm => 5 + ((tm-start)/span)*90;
+
+  const spark = document.createElement('div');
+  spark.className = 'spark';
+  spark.innerHTML = '<div class="axis"></div><div class="today"></div>';
+
+  for (let i = startIdx; i < times.length; i++) {
+    const late = i>0 && (times[i]-times[i-1] > t.interval*DAY);
+    const dot = document.createElement('div');
+    dot.className = 'dot ' + (late ? 'late' : 'ontime');
+    dot.style.left = pos(times[i]) + '%';
+    dot.title = new Date(times[i]).toLocaleDateString();
+    spark.appendChild(dot);
+  }
+
+  let lastLeft = 999;
+  for (let i = shown.length-1; i >= 0; i--) {
+    const left = pos(shown[i]);
+    if (Math.abs(left - lastLeft) < 11 && i !== shown.length-1) continue;
+    lastLeft = left;
+    const lab = document.createElement('div');
+    lab.className = 'dlabel';
+    lab.style.left = left + '%';
+    lab.textContent = shortDate(shown[i]);
+    spark.appendChild(lab);
+  }
+
+  if (times.length > CAP) {
+    const more = document.createElement('div');
+    more.className = 'more';
+    more.textContent = 'last ' + CAP + ' of ' + times.length;
+    spark.appendChild(more);
+  }
+
+  cell.appendChild(spark);
+  return cell;
+}
+
+function sortKey(t){ const d=daysSince(lastDone(t)); return d===null?Infinity:d-t.interval; }
+
+function render() {
+  document.getElementById('warn').textContent = storageOK ? ''
+    : '\u26a0 Storage is blocked in this preview \u2014 save the file and open it on your phone to keep data. Import/export still work.';
+
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  if (!tasks.length){ list.innerHTML = '<div class="empty">No tasks yet. Add one below.</div>'; return; }
+
+  const sorted = [...tasks].sort((a,b)=>sortKey(b)-sortKey(a));
+  for (const t of sorted) {
+    const info = dueInfo(t);
+    const el = document.createElement('div');
+    el.className = 'task ' + info.cls;
+
+    const main = document.createElement('div');
+    main.className = 'task-main';
+    const name = document.createElement('div'); name.className='task-name'; name.textContent = t.name;
+
+    const sub = document.createElement('div'); sub.className='task-sub';
+    sub.append(info.text + ' \u00b7 every ');
+    const ri = document.createElement('input');
+    ri.type='number'; ri.min='1'; ri.value=t.interval; ri.className='recur-input';
+    ri.onchange = () => { const v=parseInt(ri.value,10); if(v>=1){ t.interval=v; save(); } else { ri.value=t.interval; } };
+    sub.appendChild(ri); sub.append(' d');
+
+    main.append(name, sub);
+
+    const btns = document.createElement('div'); btns.className='btns';
+    const done = document.createElement('button'); done.className='done-btn'; done.textContent='Done today';
+    done.onclick = () => {
+      t.history = t.history||[];
+      const today = new Date().toISOString().slice(0,10);
+      if (!t.history.some(d=>d.slice(0,10)===today)) t.history.push(new Date().toISOString());
+      save();
+    };
+    const del = document.createElement('button'); del.className='del-btn'; del.title='Delete'; del.textContent='\u00d7';
+    del.onclick = () => { if(confirm('Delete "'+t.name+'"?')){ tasks = tasks.filter(x=>x.id!==t.id); save(); } };
+    btns.append(done, del);
+
+    el.append(main, btns, buildChart(t));
+    list.appendChild(el);
+  }
+}
+
+document.getElementById('add').onclick = () => {
+  const nameEl=document.getElementById('new-name'), intEl=document.getElementById('new-interval');
+  const name=nameEl.value.trim(), interval=parseInt(intEl.value,10);
+  if(!name||!interval||interval<1) return;
+  tasks.push({ id:Date.now().toString(), name, interval, history:[] });
+  nameEl.value=''; intEl.value='30'; save();
+};
+document.getElementById('new-name').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('add').click(); });
+
+function csvEsc(s){ s=String(s); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; }
+function toCSV(){
+  const rows = [['name','interval_days','history_iso_semicolon_separated']];
+  for(const t of tasks) rows.push([t.name, t.interval, (t.history||[]).join(';')]);
+  return rows.map(r=>r.map(csvEsc).join(',')).join('\n');
+}
+document.getElementById('export').onclick = () => {
+  const blob = new Blob([toCSV()], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'recurring-tasks.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+};
+function parseCSV(text){
+  const rows=[]; let field='', row=[], inQ=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(inQ){
+      if(c==='"'){ if(text[i+1]==='"'){field+='"';i++;} else inQ=false; }
+      else field+=c;
+    } else {
+      if(c==='"') inQ=true;
+      else if(c===',') { row.push(field); field=''; }
+      else if(c==='\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+      else if(c!=='\r') field+=c;
+    }
+  }
+  if(field.length||row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+document.getElementById('import-btn').onclick = () => document.getElementById('import-file').click();
+document.getElementById('import-file').onchange = (e) => {
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const rows = parseCSV(String(reader.result)).filter(r=>r.length && r.some(c=>c.trim()!==''));
+      if(!rows.length) throw new Error('empty');
+      const body = /interval/i.test(rows[0].join(',')) ? rows.slice(1) : rows;
+      const imported = body.map((r,i)=>({
+        id: Date.now().toString()+'_'+i,
+        name: (r[0]||'Untitled').trim(),
+        interval: Math.max(1, parseInt(r[1],10)||30),
+        history: (r[2]||'').split(';').map(s=>s.trim()).filter(Boolean)
+      }));
+      if(!imported.length) throw new Error('no rows');
+      if(tasks.length && !confirm('Replace current '+tasks.length+' task(s) with '+imported.length+' imported task(s)?')) return;
+      tasks = imported; save();
+    } catch(err){ alert('Could not read that CSV. Expected columns: name, interval_days, history (dates joined by ;).'); }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+};
+
+load();
+</script>
+</body>
+</html>
